@@ -1,4 +1,4 @@
-# http_sever
+# http_server
 
 参考 https://github.com/qinguoyi/TinyWebServer 和 《Linux高性能服务器编程》游双
 
