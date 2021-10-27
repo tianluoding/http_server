@@ -2,7 +2,7 @@
 
 参考 https://github.com/qinguoyi/TinyWebServer 和 《Linux高性能服务器编程》游双
 
-实现http服务器，处理GET POST请求
+C++实现http服务器，处理GET POST请求
 
 * **线程池**和**epoll(ET模式)**实现one reactor+多线程事件处理模型
 * 使用状态机解析http请求
