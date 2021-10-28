@@ -175,10 +175,10 @@ void WebServer::addtimer(int connfd, struct sockaddr_in client_address)
     users_timer[connfd].timer = timer;
     utils.m_timer_lst.add_timer(timer);
     */
-    tw_timer *timer = utils.m_time_wheel.add_timer(TIMESLOT);
-    timer->user_data = &users_timer[connfd];
-    timer->cb_func = cb_func;
-
+    users_timer[connfd].timer = utils.m_time_wheel.add_timer(5*TIMESLOT);
+    users_timer[connfd].timer->user_data = &users_timer[connfd];
+    users_timer[connfd].timer->cb_func = cb_func;
+    
 }
 
 //若有数据传输，则将定时器往后延迟3个单位
@@ -186,28 +186,8 @@ void WebServer::addtimer(int connfd, struct sockaddr_in client_address)
 
 void WebServer::adjust_timer(tw_timer *timer)
 {
-    if(!timer->next&&!timer->prev)
-    {
-        delete timer;
-        timer = utils.m_time_wheel.add_timer(3*TIMESLOT);
-        return;
-    }
-    if(!timer->next)
-    {
-        timer->prev = NULL;
-        timer = utils.m_time_wheel.add_timer(3*TIMESLOT);
-        return;
-    }
-    if(!timer->prev)
-    {
-        timer->next->prev = NULL;
-        timer = utils.m_time_wheel.add_timer(3*TIMESLOT);
-        return;
-    }
-    tw_timer *tmp = timer->next;
-    timer->prev->next = tmp;
-    tmp->prev = timer->prev;
-    timer = utils.m_time_wheel.add_timer(3*TIMESLOT);
+    
+    utils.m_time_wheel.adjust_timer(timer, 10*TIMESLOT);
 
     LOG_INFO("%s", "adjust timer once");
 }

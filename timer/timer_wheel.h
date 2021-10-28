@@ -4,6 +4,7 @@
 #include <time.h>
 #include <netinet/in.h>
 #include <stdio.h>
+#include "../lock/locker.h"
 
 #define BUFFER_SIZE 64
 
@@ -35,6 +36,7 @@ class time_wheel
 public:
     time_wheel() : cur_slot(0)
     {
+        lock = new locker();
         for(int i = 0; i < N; ++i)
         {
             slots[i] = NULL;
@@ -52,6 +54,7 @@ public:
                 tmp = slots[i];
             }
         }
+        delete lock;
     }
 
     tw_timer* add_timer(int timeout)
@@ -62,13 +65,13 @@ public:
         }
         int ticks = 0;
 
-        if(timeout < 1)
+        if(timeout < SI)
         {
             ticks = 1;
         }
         else
         {
-            ticks = timeout / SI;
+            ticks = timeout / SI + 1;
         }
 
         int rotation = ticks / N;
@@ -77,9 +80,10 @@ public:
 
         tw_timer* timer = new tw_timer(rotation, ts);
 
+        lock->lock();
         if( !slots[ts])
         {
-            printf("add timer, rotation is %d, ts is %d, cur_slot is %d\n", rotation, ts, cur_slot);
+            //printf("add timer, rotation is %d, ts is %d, cur_slot is %d\n", rotation, ts, cur_slot);
             slots[ts] = timer;
         }
         else
@@ -88,6 +92,7 @@ public:
             slots[ts]->prev = timer;
             slots[ts] = timer;
         }
+        lock->unlock();
         return timer;
     }
 
@@ -99,6 +104,7 @@ public:
         }
         int ts = timer->time_slot;
 
+        lock->lock();
         if(timer == slots[ts])
         {
             slots[ts] = slots[ts]->next;
@@ -110,6 +116,12 @@ public:
         }
         else
         {
+            if(!timer->prev)
+            {
+                printf("nullptr!\n");
+                printf("%p rotation is %d, ts is %d, cur_slot is %d\n", timer, timer->rotation, timer->time_slot, cur_slot);
+                printf("%p slot[ts] rotation is %d, ts is %d, cur_slot is %d\n",slots[ts], slots[ts]->rotation, slots[ts]->time_slot, cur_slot);
+            }
             timer->prev->next = timer->next;
             if(timer->next)
             {
@@ -117,6 +129,67 @@ public:
             }
             delete timer;
         }
+        lock->unlock();
+    }
+
+    void adjust_timer(tw_timer* timer, int timeout)
+    {
+        if(!timer || timeout < 0)
+        {
+            return;
+        }
+        int ts = timer->time_slot;
+        lock->lock();
+        if(timer == slots[ts])
+        {
+            slots[ts] = slots[ts]->next;
+            if(slots[ts])
+            {
+                slots[ts]->prev = NULL;
+            }
+        }
+        else
+        {
+            if(!timer->prev)
+            {
+                printf("nullptr!\n");
+                printf("%p rotation is %d, ts is %d, cur_slot is %d\n", timer, timer->rotation, timer->time_slot, cur_slot);
+                printf("%p slot[ts] rotation is %d, ts is %d, cur_slot is %d\n", slots[ts], slots[ts]->rotation, slots[ts]->time_slot, cur_slot);
+            }
+            
+            timer->prev->next = timer->next;
+            if(timer->next)
+            {
+                timer->next->prev = timer->prev;
+            }
+        }
+        int ticks = 0;
+        if(timeout < SI)
+        {
+            ticks = 1;
+        }
+        else
+        {
+            ticks = timeout / SI + 1;
+           
+        }
+        int rotation = ticks / N;
+        ts = (cur_slot + (ticks % N)) % N;
+        timer->rotation = rotation;
+        timer->time_slot = ts;
+
+        if(!slots[ts])
+        {
+            //printf("adjsut timer, rotation is %d, ts is %d, cur_slot is %d\n", rotation, ts, cur_slot);
+            slots[ts] = timer;
+        }
+        else
+        {
+            timer->next = slots[ts];
+            slots[ts]->prev = timer;
+            slots[ts] = timer;
+        }
+        lock->unlock();
     }
 
     void tick()
@@ -134,6 +207,7 @@ public:
             else
             {
                 tmp->cb_func(tmp->user_data);
+                lock->lock();
                 if(tmp == slots[cur_slot])
                 {
                     //printf("delete header in cur_slot\n");
@@ -147,6 +221,12 @@ public:
                 }
                 else
                 {
+                    if(!tmp->prev)
+                    {
+                        printf("nullptr!\n");
+                        printf("%p rotation is %d, ts is %d, cur_slot is %d\n", tmp, tmp->rotation, tmp->time_slot, cur_slot);
+                        printf("%p slot[ts] rotation is %d, ts is %d, cur_slot is %d\n", slots[cur_slot], slots[cur_slot]->rotation, slots[cur_slot]->time_slot, cur_slot);
+                    }
                     tmp->prev->next = tmp->next;
                     if(tmp->next)
                     {
@@ -156,6 +236,7 @@ public:
                     delete tmp;
                     tmp = tmp2;
                 }
+                lock->unlock();
             }
         }
         cur_slot = ++cur_slot % N;
@@ -163,9 +244,10 @@ public:
 
 private:
     static const int N = 60;
-    static const int SI = 5;
+    static const int SI = 1;
 
     tw_timer* slots[N];
     int cur_slot;
+    locker* lock;
 };
 #endif
